@@ -15,33 +15,28 @@
 
 ## Installation
 
-**Note:** Package will be available on PyPI soon. For now, install from GitHub:
-
-### Option 1: Clone and Install (Recommended)
-
-```bash
-# Clone repository
-git clone https://github.com/nborwankar/embedding_tools.git
-cd embedding_tools
-
-# Install with desired backends
-pip install -e .              # Core (NumPy only)
-pip install -e ".[mlx]"       # With MLX (Apple Silicon)
-pip install -e ".[torch]"     # With PyTorch
-pip install -e ".[all]"       # Everything
-pip install -e ".[dev]"       # Development tools
-```
-
-### Option 2: Direct Install from GitHub
-
 ```bash
 # Core (NumPy only)
-pip install git+https://github.com/nborwankar/embedding_tools.git
+pip install embedding_tools
 
-# With extras (note the quotes)
-pip install "embedding_tools[mlx] @ git+https://github.com/nborwankar/embedding_tools.git"
-pip install "embedding_tools[torch] @ git+https://github.com/nborwankar/embedding_tools.git"
-pip install "embedding_tools[all] @ git+https://github.com/nborwankar/embedding_tools.git"
+# With MLX (Apple Silicon)
+pip install embedding_tools[mlx]
+
+# With PyTorch
+pip install embedding_tools[torch]
+
+# Everything
+pip install embedding_tools[all]
+```
+
+### Development Installation
+
+To contribute or use the latest development version:
+
+```bash
+git clone https://github.com/nborwankar/embedding_tools.git
+cd embedding_tools
+pip install -e ".[dev]"
 ```
 
 ## Quick Start
@@ -126,9 +121,9 @@ cache_key = f"embeddings_{hash_val}.npz"
 
 | Backend | Hardware | Speed | Memory | Installation |
 |---------|----------|-------|--------|--------------|
-| NumPy   | CPU      | 1x    | System RAM | `pip install -e .` |
-| MLX     | Apple Silicon GPU | 3-5x | Unified memory | `pip install -e ".[mlx]"` |
-| PyTorch | CUDA/MPS/CPU | 2-4x | GPU VRAM | `pip install -e ".[torch]"` |
+| NumPy   | CPU      | 1x    | System RAM | `pip install embedding_tools` |
+| MLX     | Apple Silicon GPU | 3-5x | Unified memory | `pip install embedding_tools[mlx]` |
+| PyTorch | CUDA/MPS/CPU | 2-4x | GPU VRAM | `pip install embedding_tools[torch]` |
 
 **Device Options for PyTorch:**
 - `device='cuda'`: NVIDIA GPUs (Linux/Windows)
