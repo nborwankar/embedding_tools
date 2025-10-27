@@ -171,7 +171,7 @@ All core functionality tests passed!
 
 ```bash
 # Clone repository
-git clone https://github.com/writeapaper/embedding_tools.git
+git clone https://github.com/nborwankar/embedding_tools.git
 cd embedding_tools
 
 # Install in development mode
@@ -337,8 +337,8 @@ If you use embedding_tools in your research, please cite:
 ```bibtex
 @software{embedding_tools2024,
   title = {embedding_tools: Utilities for embedding experiments},
-  author = {WriteAPaper Project},
+  author = {Nitin Borwankar},
   year = {2024},
-  url = {https://github.com/writeapaper/embedding_tools}
+  url = {https://github.com/nborwankar/embedding_tools}
 }
 ```
