@@ -30,7 +30,7 @@ Add JAX backend to `embedding_tools` for JIT-compiled GPU acceleration on NVIDIA
 ### 1.1 Install JAX
 
 ```bash
-cd /Users/nitin/Projects/github/writeapaper/other/embedding_tools
+cd /Users/nitin/Projects/github/embedding_tools
 
 # For Apple Silicon (Metal backend)
 pip install jax-metal
@@ -587,7 +587,7 @@ class TestJAXBackend:
 ### 3.2 Run Tests
 
 ```bash
-cd /Users/nitin/Projects/github/writeapaper/other/embedding_tools
+cd /Users/nitin/Projects/github/embedding_tools
 
 # Run JAX-specific tests
 pytest tests/test_jax_backend.py -v
