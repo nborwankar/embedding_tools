@@ -25,3 +25,6 @@ htmlcov/
 .venv
 env/
 venv/
+
+# Maintenance docs (private)
+docs/MAINTENANCE.md
