@@ -217,19 +217,106 @@ After fix, all core functionality works:
 
 ---
 
-## Current Status
+## PyTorch Installation Fix (2025-10-26)
+
+**Solution**: Created dedicated conda environment
+
+The corrupted PyTorch installation was resolved by creating a clean conda environment:
+
+```bash
+# Create conda environment
+conda create -n embedding_tools python=3.11 -y
+
+# Activate environment
+conda activate embedding_tools
+
+# Install embedding_tools with all dependencies (including PyTorch)
+pip install -e ".[all]"
+```
+
+### Installation Results
+
+**Packages Installed**:
+- numpy 2.3.4
+- mlx 0.29.3
+- mlx-metal 0.29.3
+- **torch 2.9.0** ✅
+- All dependencies (sympy, networkx, filelock, etc.)
+
+### Testing Results (All Passing)
+
+**NumPy Backend**:
+```
+✓ Backend: NumpyBackend
+✓ Created array: shape=(2, 3)
+✓ Cosine similarity: [[0.9999999 0.9746318]]
+```
+
+**MLX Backend**:
+```
+✓ Backend: MLXBackend
+✓ Created array: shape=(2, 3)
+✓ Cosine similarity: [[0.9999999 0.9746318]]
+```
+
+**PyTorch Backend** ✅ NOW WORKING:
+```
+TorchBackend using device: mps
+✓ Backend: TorchBackend
+✓ Device: mps
+✓ Created array: shape=(2, 3)
+✓ Cosine similarity: [0.99999994 0.9746318]
+```
+
+**Full Validation Suite**:
+```
+[1/5] Testing package import... ✓
+[2/5] Testing NumPy backend... ✓
+[3/5] Testing MLX backend... ✓
+[4/5] Testing EmbeddingStore... ✓
+[5/5] Testing configuration versioning... ✓
+```
+
+**PyTorch-Specific Tests** (7 tests):
+```
+[1] Auto-detection: mps ✓
+[2] Explicit MPS: mps ✓
+[3] Basic operations: ✓
+[4] Cosine similarity: ✓
+[5] Dimension slicing: ✓
+[6] EmbeddingStore integration: ✓
+[7] Memory info: ✓
+```
+
+---
+
+## Final Status
 
 **Working Backends**:
 - ✅ NumPy (CPU)
 - ✅ MLX (Apple Silicon GPU)
+- ✅ **PyTorch (MPS - Apple Silicon GPU)** 🎉
 
 **Broken Backend**:
-- ❌ PyTorch (corrupted installation, missing dylibs)
+- None! All backends working.
 
 **Package Status**:
-- ✅ pip installation complete
-- ✅ Imports work
-- ✅ Consumer works
-- ✅ Ready for extraction to standalone repo
+- ✅ Clean conda environment created
+- ✅ PyTorch 2.9.0 installed successfully
+- ✅ All backends tested and working
+- ✅ Full validation suite passing
+- ✅ PyTorch using MPS device (Apple Silicon GPU acceleration)
+- ✅ Ready for production use
 
-**Next Step**: Follow EXTRACTION_PLAN.md to move to `~/Projects/github/embedding_tools/`
+**Development Environment**:
+```bash
+# Activate environment for development
+conda activate embedding_tools
+
+# Run tests
+python validate.py
+python test_torch_backend.py
+pytest tests/ -v
+```
+
+**Next Step**: This issue is now fully resolved. PyTorch backend is production-ready.
