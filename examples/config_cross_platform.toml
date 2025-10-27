@@ -1,0 +1,39 @@
+# Cross-Platform Configuration with Automatic Fallbacks
+# This config works on Mac, Linux, and handles CPU fallback
+
+[experiment]
+name = "cross_platform_deployment"
+
+[backend]
+# Primary backend choice
+type = "torch"
+device = "auto"  # Auto-detect best device: cuda → mps → cpu
+
+# Platform-specific overrides (optional)
+[backend.platform_overrides]
+
+[backend.platform_overrides.Darwin]
+type = "mlx"  # Prefer MLX on Mac for best performance
+# If MLX not available, falls back to torch with device=auto
+
+[backend.platform_overrides.Linux]
+type = "torch"
+device = "cuda"  # Prefer CUDA on Linux
+# If CUDA not available, falls back to cpu automatically
+
+[backend.platform_overrides.Windows]
+type = "torch"
+device = "cpu"  # Windows: use CPU (or cuda if available)
+
+# Fallback strategy (if primary backend unavailable)
+[backend.fallback]
+enabled = true
+strategy = "torch_cpu"  # Final fallback: always use torch with CPU
+
+[memory]
+max_gb = 20.0  # Adjust based on available system memory
+
+[model]
+name = "all-mpnet-base-v2"
+dimension = 768
+batch_size = 32

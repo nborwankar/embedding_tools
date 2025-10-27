@@ -1,0 +1,19 @@
+# Configuration for Linux Production
+# Use this config on Linux servers with NVIDIA GPUs
+
+[experiment]
+name = "linux_production"
+platform = "linux"
+
+[backend]
+type = "torch"
+device = "cuda"  # Use CUDA for NVIDIA GPU acceleration
+# Fallback to CPU if CUDA not available (handled in code)
+
+[memory]
+max_gb = 40.0  # Typical GPU server memory
+
+[model]
+name = "all-mpnet-base-v2"
+dimension = 768
+batch_size = 32  # Conservative batch size for CUDA

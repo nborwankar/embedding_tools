@@ -1,0 +1,30 @@
+# Configuration for Mac with Performance Prioritization
+# This config prefers GPU acceleration, falling back to MLX if primary fails
+
+[experiment]
+name = "mac_performance_priority"
+description = "Prioritize performance on Mac - try PyTorch MPS first, fallback to MLX"
+
+[backend]
+type = "torch"
+device = "mps"  # Try PyTorch MPS first for ecosystem compatibility
+
+# If MPS fails, fallback to MLX for best Mac performance
+[backend.fallback]
+enabled = true
+strategy = "mlx"  # Fallback to MLX (20-40% faster than torch_cpu)
+# If MLX also fails, will automatically fall back to torch_cpu
+
+[memory]
+max_gb = 20.0
+
+[model]
+name = "all-mpnet-base-v2"
+dimension = 768
+batch_size = 64
+
+# Why this configuration?
+# 1. Try PyTorch MPS: Good for cross-platform code consistency
+# 2. If MPS fails: Use MLX for best Mac performance (faster than CPU)
+# 3. If MLX unavailable: Automatically falls back to torch_cpu
+# 4. Final fallback: numpy (always works)

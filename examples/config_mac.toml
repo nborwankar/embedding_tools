@@ -1,0 +1,18 @@
+# Configuration for Mac Development
+# Use this config on macOS for maximum performance
+
+[experiment]
+name = "mac_development"
+platform = "darwin"
+
+[backend]
+type = "mlx"  # Use MLX for fastest performance on Apple Silicon
+# No device needed for MLX (automatically uses GPU)
+
+[memory]
+max_gb = 20.0  # M2 Max with 96GB RAM can handle this
+
+[model]
+name = "all-mpnet-base-v2"
+dimension = 768
+batch_size = 64  # Larger batches work well with MLX
