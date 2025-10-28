@@ -1,5 +1,9 @@
 # embedding_tools
 
+[![PyPI version](https://badge.fury.io/py/embedding-tools.svg)](https://pypi.org/project/embedding-tools/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Utilities for embedding experiments with cross-platform array support**
 
 `embedding_tools` provides a backend-agnostic interface for working with embeddings across NumPy, MLX (Apple Silicon), and PyTorch. It includes memory management, configuration versioning, and similarity search utilities optimized for machine learning research.
