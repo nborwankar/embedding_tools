@@ -346,10 +346,10 @@ Contributions welcome! Please read CONTRIBUTING.md for guidelines.
 If you use embedding_tools in your research, please cite:
 
 ```bibtex
-@software{embedding_tools2024,
+@software{embedding_tools2025,
   title = {embedding_tools: Utilities for embedding experiments},
   author = {Nitin Borwankar},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/nborwankar/embedding_tools}
 }
 ```
