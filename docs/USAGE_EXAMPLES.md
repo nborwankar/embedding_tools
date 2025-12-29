@@ -12,6 +12,7 @@ Practical examples of using `embedding_tools` in typical experimental workflows,
 6. [Experiment Versioning and Caching](#6-experiment-versioning-and-caching)
 7. [Memory-Constrained Experiments](#7-memory-constrained-experiments)
 8. [Cross-Platform Development](#8-cross-platform-development)
+9. [JAX Backend with JIT Compilation](#9-jax-backend-with-jit-compilation)
 
 ---
 
@@ -906,16 +907,298 @@ if hasattr(backend, 'device'):
 
 ---
 
+## 9. JAX Backend with JIT Compilation
+
+### Basic JAX Usage
+
+```python
+import numpy as np
+from embedding_tools import get_backend, EmbeddingStore
+from sentence_transformers import SentenceTransformer
+
+def jax_basic_example(documents: list[str], queries: list[str]):
+    """Basic JAX backend usage with JIT compilation."""
+
+    # Use JAX backend (auto-detects best device: GPU/TPU/CPU)
+    backend = get_backend('jax')
+    print(f"JAX Device: {backend.device}")
+
+    # Create store with JAX backend
+    store = EmbeddingStore(backend='jax', max_memory_gb=15.0)
+
+    # Load model and encode
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    dimension = 384
+
+    doc_embeddings = model.encode(
+        documents,
+        batch_size=32,
+        convert_to_numpy=True
+    ).astype(np.float32)
+
+    store.add_embeddings(doc_embeddings, dimension=dimension)
+
+    # Query with JIT-compiled cosine similarity
+    # First call: ~70ms (includes JIT compilation)
+    # Subsequent calls: ~0.05ms (uses compiled kernel)
+    query_embeddings = model.encode(
+        queries,
+        batch_size=32,
+        convert_to_numpy=True
+    ).astype(np.float32)
+
+    import time
+    results = []
+
+    for idx, q_emb in enumerate(query_embeddings):
+        start = time.perf_counter()
+        sims, indices = store.compute_similarity(
+            q_emb,
+            dimension=dimension,
+            top_k=10
+        )
+        elapsed = (time.perf_counter() - start) * 1000  # ms
+
+        if idx == 0:
+            print(f"First query (with JIT compilation): {elapsed:.2f}ms")
+        elif idx == 1:
+            print(f"Second query (using compiled kernel): {elapsed:.2f}ms")
+            print(f"Speedup: {results[0]['time'] / elapsed:.1f}x")
+
+        results.append({
+            'indices': backend.to_numpy(indices).tolist(),
+            'scores': backend.to_numpy(sims).tolist(),
+            'time': elapsed
+        })
+
+    avg_time = np.mean([r['time'] for r in results[1:]])  # Exclude first (compilation)
+    print(f"\nAverage query time (after JIT): {avg_time:.2f}ms")
+    print(f"Total queries: {len(results)}")
+
+    return results
+
+# Usage
+results = jax_basic_example(documents, queries)
+```
+
+### JAX for Batch Processing (Optimal for JIT)
+
+```python
+import numpy as np
+import time
+from embedding_tools import get_backend
+
+def jax_batch_processing_example(documents: list[str], batch_size: int = 1000):
+    """Demonstrate JAX performance on batch operations."""
+
+    backend = get_backend('jax', device='gpu')  # Force GPU if available
+    print(f"JAX Device: {backend.device}")
+
+    # Simulate large embedding corpus
+    num_docs = len(documents)
+    dimension = 768
+
+    # Create random embeddings for demonstration
+    doc_embeddings = backend.create_array(
+        np.random.randn(num_docs, dimension).astype(np.float32)
+    )
+
+    # Normalize (not JIT-compiled in our implementation)
+    doc_embeddings = backend.normalize(doc_embeddings)
+
+    # Batch similarity computation (benefits from JIT)
+    num_queries = 100
+    query_embeddings = backend.create_array(
+        np.random.randn(num_queries, dimension).astype(np.float32)
+    )
+    query_embeddings = backend.normalize(query_embeddings)
+
+    print(f"\nComputing similarities for {num_queries} queries against {num_docs} documents...")
+
+    # First batch (includes JIT compilation)
+    start = time.perf_counter()
+    sims_first = backend.cosine_similarity(query_embeddings[:10], doc_embeddings)
+    first_time = time.perf_counter() - start
+    print(f"First batch (10 queries, with JIT): {first_time*1000:.2f}ms")
+
+    # Second batch (uses compiled kernel)
+    start = time.perf_counter()
+    sims_second = backend.cosine_similarity(query_embeddings[10:20], doc_embeddings)
+    second_time = time.perf_counter() - start
+    print(f"Second batch (10 queries, cached JIT): {second_time*1000:.2f}ms")
+    print(f"Speedup: {first_time/second_time:.1f}x")
+
+    # Full batch
+    start = time.perf_counter()
+    all_sims = backend.cosine_similarity(query_embeddings, doc_embeddings)
+    batch_time = time.perf_counter() - start
+
+    print(f"\nFull batch ({num_queries} queries): {batch_time*1000:.2f}ms")
+    print(f"Per-query average: {batch_time*1000/num_queries:.2f}ms")
+    print(f"Shape: {backend.get_shape(all_sims)}")  # (num_queries, num_docs)
+
+    return backend.to_numpy(all_sims)
+
+# Usage
+similarity_matrix = jax_batch_processing_example(documents)
+```
+
+### Cross-Platform with JAX Preference
+
+```python
+import platform
+from embedding_tools import get_backend, EmbeddingStore
+
+def adaptive_backend_selection():
+    """Automatically select best backend for platform with JAX preference."""
+
+    # Try backends in order of performance
+    backend_priority = [
+        ('mlx', None),      # Best for Apple Silicon
+        ('jax', 'gpu'),     # Best for GPU/TPU with JIT
+        ('torch', 'cuda'),  # Good for NVIDIA GPUs
+        ('torch', 'mps'),   # Good for Apple Silicon
+        ('numpy', None)     # CPU fallback
+    ]
+
+    for backend_name, device in backend_priority:
+        try:
+            backend = get_backend(backend_name, device=device)
+            print(f"✓ Selected backend: {backend.__class__.__name__}")
+            if hasattr(backend, 'device'):
+                print(f"  Device: {backend.device}")
+            return backend, backend_name, device
+        except (ImportError, ValueError) as e:
+            print(f"✗ {backend_name} not available: {e}")
+            continue
+
+    raise RuntimeError("No backends available!")
+
+# Usage
+backend, backend_name, device = adaptive_backend_selection()
+store = EmbeddingStore(backend=backend_name, max_memory_gb=20.0, device=device)
+```
+
+### JAX for Research Workflows
+
+```python
+import numpy as np
+from embedding_tools import get_backend, compute_param_hash
+import json
+from pathlib import Path
+
+def research_experiment_jax(
+    model_name: str,
+    dimensions: list[int],
+    documents: list[str],
+    queries: list[str]
+):
+    """Research experiment leveraging JAX JIT for repeated evaluations."""
+
+    # Use JAX for fast iteration
+    backend = get_backend('jax')
+
+    # Configuration
+    config = {
+        'model': model_name,
+        'dimensions': dimensions,
+        'backend': 'jax',
+        'jit_enabled': True
+    }
+    exp_hash = compute_param_hash(**config)
+
+    # Setup experiment directory
+    exp_dir = Path(f"experiments/jax_exp_{exp_hash}")
+    exp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save config
+    with open(exp_dir / 'config.json', 'w') as f:
+        json.dump(config, f, indent=2)
+
+    # Encode once (model encoding is expensive)
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer(model_name)
+
+    doc_embeddings = model.encode(
+        documents,
+        batch_size=32,
+        convert_to_numpy=True
+    ).astype(np.float32)
+
+    query_embeddings = model.encode(
+        queries,
+        batch_size=32,
+        convert_to_numpy=True
+    ).astype(np.float32)
+
+    # Evaluate at multiple dimensions (leverages JIT cache)
+    results = {}
+
+    for dim in dimensions:
+        print(f"\nEvaluating at {dim}D...")
+
+        # Slice to dimension
+        doc_emb_sliced = backend.create_array(doc_embeddings[:, :dim])
+        query_emb_sliced = backend.create_array(query_embeddings[:, :dim])
+
+        # Normalize
+        doc_emb_sliced = backend.normalize(doc_emb_sliced)
+        query_emb_sliced = backend.normalize(query_emb_sliced)
+
+        # Compute similarities (JIT-compiled, fast after first call)
+        import time
+        start = time.perf_counter()
+        sims = backend.cosine_similarity(query_emb_sliced, doc_emb_sliced)
+        elapsed = time.perf_counter() - start
+
+        # Get top-k for each query
+        sims_np = backend.to_numpy(sims)
+        top_k_indices = np.argsort(-sims_np, axis=1)[:, :10]
+        top_k_scores = np.take_along_axis(sims_np, top_k_indices, axis=1)
+
+        results[dim] = {
+            'time_ms': elapsed * 1000,
+            'top_k_indices': top_k_indices.tolist(),
+            'top_k_scores': top_k_scores.tolist(),
+            'mean_score': float(sims_np.mean()),
+            'std_score': float(sims_np.std())
+        }
+
+        print(f"  Time: {elapsed*1000:.2f}ms")
+        print(f"  Mean similarity: {results[dim]['mean_score']:.4f}")
+
+    # Save results
+    with open(exp_dir / 'results.json', 'w') as f:
+        json.dump(results, f, indent=2)
+
+    print(f"\nResults saved to {exp_dir}")
+    print(f"Experiment hash: {exp_hash}")
+
+    return results, exp_hash
+
+# Usage
+results, exp_hash = research_experiment_jax(
+    model_name='all-MiniLM-L6-v2',
+    dimensions=[64, 128, 256, 384],  # Progressive evaluation
+    documents=large_corpus,
+    queries=test_queries
+)
+```
+
+---
+
 ## Summary
 
 These examples demonstrate:
 
-1. **GPU Acceleration**: CUDA (NVIDIA), MPS (Apple Silicon), or MLX (Apple Silicon)
-2. **Device Configuration**: Explicit device specification for PyTorch backend
-3. **Memory Management**: Configurable limits and monitoring
-4. **Experiment Versioning**: SHA-256 hashing for reproducibility
-5. **Matryoshka Support**: Progressive dimension evaluation
-6. **Cross-Platform**: Portable artifacts between Mac and Linux
-7. **Production-Ready**: Caching, batching, error handling
+1. **GPU Acceleration**: CUDA (NVIDIA), MPS (Apple Silicon), MLX (Apple Silicon), or JAX (cross-platform with JIT)
+2. **JIT Compilation**: JAX backend provides 5-10x speedup on repeated operations via XLA
+3. **Device Configuration**: Explicit device specification for PyTorch and JAX backends
+4. **Memory Management**: Configurable limits and monitoring
+5. **Experiment Versioning**: SHA-256 hashing for reproducibility
+6. **Matryoshka Support**: Progressive dimension evaluation
+7. **Cross-Platform**: Portable artifacts between Mac and Linux
+8. **Production-Ready**: Caching, batching, error handling
+9. **Research Workflows**: Fast iteration with JIT-compiled operations
 
 All workflows use the same clean API while optimizing for the underlying hardware.

@@ -17,12 +17,21 @@ except ImportError:
     TORCH_AVAILABLE = False
     TorchBackend = None
 
+try:
+    from .jax_backend import JAXBackend
+    JAX_AVAILABLE = True
+except ImportError:
+    JAX_AVAILABLE = False
+    JAXBackend = None
+
 __all__ = [
     'ArrayBackend',
     'get_backend',
     'NumpyBackend',
     'MLXBackend',
     'TorchBackend',
+    'JAXBackend',
     'MLX_AVAILABLE',
     'TORCH_AVAILABLE',
+    'JAX_AVAILABLE',
 ]

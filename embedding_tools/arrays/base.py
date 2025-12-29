@@ -231,10 +231,10 @@ def get_backend(backend_name: Optional[str] = None, device: Optional[str] = None
     """Get array backend by name.
 
     Args:
-        backend_name: Backend name ('numpy', 'mlx', 'torch').
+        backend_name: Backend name ('numpy', 'mlx', 'torch', 'jax').
                      If None, auto-detect best available backend.
-        device: Device for PyTorch backend ('cuda', 'mps', 'cpu').
-               Only used when backend_name='torch'. Auto-detects if None.
+        device: Device for PyTorch/JAX backend ('cuda', 'mps', 'cpu', 'gpu').
+               Only used when backend_name='torch' or 'jax'. Auto-detects if None.
 
     Returns:
         ArrayBackend instance
@@ -250,10 +250,14 @@ def get_backend(backend_name: Optional[str] = None, device: Optional[str] = None
             backend_name = 'mlx'
         except ImportError:
             try:
-                import torch
-                backend_name = 'torch'
+                import jax
+                backend_name = 'jax'
             except ImportError:
-                backend_name = 'numpy'
+                try:
+                    import torch
+                    backend_name = 'torch'
+                except ImportError:
+                    backend_name = 'numpy'
 
     backend_name = backend_name.lower()
 
@@ -266,8 +270,11 @@ def get_backend(backend_name: Optional[str] = None, device: Optional[str] = None
     elif backend_name == "torch":
         from .torch_backend import TorchBackend
         return TorchBackend(device=device)
+    elif backend_name == "jax":
+        from .jax_backend import JAXBackend
+        return JAXBackend(device=device)
     else:
         raise ValueError(
             f"Unknown backend: {backend_name}. "
-            f"Supported: 'numpy', 'mlx', 'torch'"
+            f"Supported: 'numpy', 'mlx', 'torch', 'jax'"
         )
