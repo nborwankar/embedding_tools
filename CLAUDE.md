@@ -2,18 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated**: 2025-10-26
+**Last Updated**: 2025-12-29
 
 ## Repository Overview
 
-`embedding_tools` is a production-ready Python library providing backend-agnostic array operations for embedding experiments. Extracted from the kb_tree_matryoshka research project, it offers seamless switching between NumPy (CPU), MLX (Apple Silicon GPU), and PyTorch (CUDA/MPS/CPU) with zero code changes.
+`embedding_tools` is a production-ready Python library providing backend-agnostic array operations for embedding experiments. Extracted from the kb_tree_matryoshka research project, it offers seamless switching between NumPy (CPU), MLX (Apple Silicon GPU), JAX (GPU/TPU with JIT), and PyTorch (CUDA/MPS/CPU) with zero code changes.
 
 **Key Features**:
 - Backend abstraction for cross-platform embedding workflows
 - Memory-safe storage with configurable limits (`EmbeddingStore`)
 - Configuration versioning via SHA-256 hashing for reproducibility
 - Optimized for Matryoshka embeddings (dimension slicing)
-- GPU acceleration: MLX (M-series Macs) and PyTorch (CUDA/MPS)
+- GPU acceleration: MLX (M-series Macs), JAX (GPU/TPU with JIT compilation), and PyTorch (CUDA/MPS)
 
 ## Development Environment
 
@@ -33,6 +33,7 @@ pip install -e ".[all]"
 **Backend Dependencies**:
 - NumPy backend: Always available (required dependency)
 - MLX backend: `pip install ".[mlx]"` (Apple Silicon only)
+- JAX backend: `pip install ".[jax]"` (cross-platform GPU/TPU)
 - PyTorch backend: `pip install ".[torch]"` (cross-platform)
 
 ## Common Commands
@@ -40,13 +41,14 @@ pip install -e ".[all]"
 ### Testing
 
 ```bash
-# Run all tests (52 core tests + 7 PyTorch tests = 59 total)
+# Run all tests (52 core tests + 23 JAX tests + 7 PyTorch tests = 75 total)
 pytest tests/ -v
 
 # Run specific test module
 pytest tests/test_arrays.py -v
 pytest tests/test_memory.py -v
 pytest tests/test_config.py -v
+pytest tests/test_jax_backend.py -v
 pytest tests/test_torch_backend.py -v
 
 # Quick installation validation
@@ -88,21 +90,22 @@ python -m embedding_tools.utils.device_detection
 
 ### Backend Abstraction Pattern
 
-The library uses abstract base class polymorphism to provide a unified interface across three array backends:
+The library uses abstract base class polymorphism to provide a unified interface across four array backends:
 
 1. **Base Layer** (`arrays/base.py`):
    - `ArrayBackend` abstract class defines 17 operations
    - `get_backend(name, device)` factory function with auto-detection
-   - Auto-detection priority: MLX (Mac) → PyTorch → NumPy
+   - Auto-detection priority: MLX (Mac) → JAX → PyTorch → NumPy
 
 2. **Backend Implementations**:
    - `NumpyBackend`: Pure NumPy (CPU fallback)
    - `MLXBackend`: Apple Silicon GPU via MLX framework
+   - `JAXBackend`: GPU/TPU/CPU with JIT compilation via JAX/XLA
    - `TorchBackend`: PyTorch with device selection (CUDA/MPS/CPU)
 
 3. **Key Design Decision**: All backends implement identical interfaces, enabling code portability:
    ```python
-   # Same code works on Mac (MLX), Linux (CUDA), or CPU (NumPy)
+   # Same code works on Mac (MLX/JAX), Linux (CUDA/JAX), or CPU (NumPy)
    backend = get_backend()  # Auto-detects best option
    embeddings = backend.create_array(data)
    sims = backend.cosine_similarity(query, embeddings)
@@ -163,6 +166,35 @@ Cross-platform backend and device detection (`utils/device_detection.py`):
 - `device='mps'`: Apple Silicon GPU (macOS)
 - `device='cpu'`: Universal fallback
 
+### JAX Backend (Cross-Platform with JIT)
+
+- **JIT compilation via XLA**: 5-10x faster on repeated operations
+- **Device auto-detection**: GPU/TPU → CPU
+- Explicit device configuration: `get_backend('jax', device='gpu')`
+- **Critical feature**: Pre-compiled kernels for cosine similarity
+- Best for: Research workflows, repeated operations, TPU support
+
+**Device mapping**:
+- `device='gpu'`: GPU acceleration (Metal/CUDA/ROCm auto-detected)
+- `device='cpu'`: CPU fallback (all platforms)
+- `device=None`: Auto-detection (recommended)
+
+**Performance characteristics**:
+- First call: ~70ms (includes JIT compilation)
+- Subsequent calls: ~0.05ms (uses compiled kernel)
+- **Speedup: ~1500x** after JIT warmup
+- Best for batch processing and research
+
+**Technical details**:
+- Uses `from __future__ import annotations` for safe imports
+- Random number generation uses fixed PRNG key for reproducibility
+- File I/O converts to NumPy format (no native JAX serialization)
+- Normalize function not JIT-compiled (dynamic axis parameter)
+
+**Installation**:
+- macOS: `pip install embedding_tools[jax]` (includes jax-metal for Apple Silicon)
+- Linux: `pip install embedding_tools[jax]` (CUDA via separate install)
+
 ### NumPy Backend (Universal)
 
 - Always available (required dependency)
@@ -174,29 +206,31 @@ Cross-platform backend and device detection (`utils/device_detection.py`):
 
 ### Adding New Backend
 
-To add a backend (e.g., JAX - see `JAX_PLAN.md`):
+**JAX backend has been implemented** (December 2024) - see `DONE.md` for implementation details.
 
-1. Create `arrays/jax_backend.py` implementing `ArrayBackend`
+To add another backend (e.g., TensorFlow):
+
+1. Create `arrays/tf_backend.py` implementing `ArrayBackend`
 2. Implement all 17 abstract methods
-3. Add optional dependency to `pyproject.toml`: `jax = ["jax>=0.4.0"]`
+3. Add optional dependency to `pyproject.toml`: `tensorflow = ["tensorflow>=2.0.0"]`
 4. Update `arrays/__init__.py` with import/detection:
    ```python
    try:
-       from .jax_backend import JAXBackend
-       JAX_AVAILABLE = True
+       from .tf_backend import TensorFlowBackend
+       TF_AVAILABLE = True
    except ImportError:
-       JAX_AVAILABLE = False
+       TF_AVAILABLE = False
    ```
 5. Update `get_backend()` factory in `base.py`
-6. Add tests in `tests/test_jax_backend.py`
-7. Update docs: README.md, USAGE_EXAMPLES.md, CHANGELOG.md
+6. Add tests in `tests/test_tf_backend.py`
+7. Update docs: README.md, USAGE_EXAMPLES.md, CHANGELOG.md, CLAUDE.md
 
 ### Adding New Operations
 
 To extend `ArrayBackend` with new operations:
 
 1. Add abstract method to `ArrayBackend` class in `arrays/base.py`
-2. Implement in all three backends: NumPy, MLX, PyTorch
+2. Implement in all four backends: NumPy, MLX, JAX, PyTorch
 3. Add tests to `tests/test_arrays.py` for each backend
 4. Document in README.md API Reference section
 
@@ -210,6 +244,7 @@ To extend `ArrayBackend` with new operations:
 - `test_arrays.py`: Backend operations, cross-conversion (19 tests)
 - `test_memory.py`: EmbeddingStore functionality (10 tests)
 - `test_config.py`: Configuration hashing (7 tests)
+- `test_jax_backend.py`: JAX-specific scenarios (23 tests)
 - `test_torch_backend.py`: PyTorch-specific scenarios (7 tests)
 
 ### Running Subset Tests

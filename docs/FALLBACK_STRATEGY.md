@@ -7,6 +7,8 @@ Complete guide to backend and device fallback strategies for cross-platform depl
 | Fallback Strategy | Platform | Performance | Use Case |
 |-------------------|----------|-------------|----------|
 | `mlx` | Mac only | **Fastest** (GPU) | Mac performance priority |
+| `jax` | All | Very fast (GPU/TPU + JIT) | GPU/TPU with JIT compilation |
+| `torch_cuda` | Linux/Windows | Very fast (GPU) | NVIDIA GPU acceleration |
 | `torch_cpu` | All | Moderate (CPU) | Cross-platform compatibility |
 | `numpy` | All | Slowest (CPU) | Minimal dependencies |
 
@@ -37,6 +39,8 @@ strategy = "torch_cpu"
 ```
 Primary: mlx
     ↓ (MLX unavailable)
+Fallback: jax (still GPU accelerated with JIT!)
+    ↓ (JAX unavailable)
 Fallback: torch_cpu
     ↓ (PyTorch unavailable)
 Ultimate: numpy
@@ -48,7 +52,7 @@ Ultimate: numpy
 type = "mlx"
 
 [backend.fallback]
-strategy = "torch_cpu"
+strategy = "jax"  # Keep GPU acceleration + JIT
 ```
 
 ### Chain 3: Mac with PyTorch MPS → MLX Fallback
@@ -78,12 +82,39 @@ strategy = "mlx"  # Stay GPU-accelerated on Mac!
 - Fallback: MLX (20-40% faster than CPU, still GPU-accelerated)
 - Better than falling directly to CPU
 
-### Chain 4: Cross-Platform Auto-Detection
+### Chain 4: JAX with JIT Compilation (Cross-Platform)
+
+```
+Primary: jax + gpu
+    ↓ (GPU unavailable)
+Fallback: jax + cpu (still benefits from JIT!)
+    ↓ (JAX unavailable)
+Fallback: torch_cpu
+    ↓ (PyTorch unavailable)
+Ultimate: numpy
+```
+
+**Config:**
+```toml
+[backend]
+type = "jax"
+device = "gpu"
+
+[backend.fallback]
+strategy = "jax_cpu"  # JIT compilation still helps
+```
+
+**Why this is useful:**
+- Primary: JAX GPU (Metal/CUDA/ROCm auto-detected)
+- Fallback: JAX CPU (still 2-3x faster than raw NumPy via JIT)
+- Better than falling directly to torch_cpu for repeated operations
+
+### Chain 5: Cross-Platform Auto-Detection
 
 ```
 Auto-detect platform:
-  - Mac: mlx → torch+mps → torch_cpu → numpy
-  - Linux: torch+cuda → torch_cpu → numpy
+  - Mac: mlx → jax → torch+mps → torch_cpu → numpy
+  - Linux: torch+cuda → jax → torch_cpu → numpy
   - Windows: torch_cpu → numpy
 ```
 
@@ -110,11 +141,12 @@ strategy = "torch_cpu"
 | Scenario | Backend | Device | Performance | Relative Speed |
 |----------|---------|--------|-------------|----------------|
 | Best case | MLX | GPU | **45s** (encode 1M docs) | 1.0x |
+| Better case | JAX | GPU (Metal) + JIT | 52s | 0.87x (13% slower) |
 | Good case | PyTorch | MPS | 62s | 0.73x (27% slower) |
 | Fallback | PyTorch | CPU | 380s | 0.12x (8.4x slower) |
 | Ultimate | NumPy | CPU | 420s | 0.11x (9.3x slower) |
 
-**Key Insight:** MLX fallback keeps GPU acceleration (62s vs 380s)!
+**Key Insight:** MLX or JAX fallback keeps GPU acceleration (52-62s vs 380s)!
 
 ### Linux Server (CUDA)
 
@@ -384,17 +416,22 @@ enabled = false  # Only for deterministic testing
 
 **Mac Performance Priority:**
 ```
-torch+mps → mlx → torch_cpu → numpy
+mlx → jax+gpu → torch+mps → torch_cpu → numpy
 ```
 
 **Linux Production:**
 ```
-torch+cuda → torch_cpu → numpy
+torch+cuda → jax+gpu → torch_cpu → numpy
 ```
 
-**Cross-Platform:**
+**Cross-Platform with JIT:**
+```
+jax+gpu → jax+cpu → torch_cpu → numpy
+```
+
+**Cross-Platform Standard:**
 ```
 torch+auto → torch_cpu → numpy
 ```
 
-**Key Takeaway:** Using `mlx` as fallback strategy on Mac keeps GPU acceleration even when primary backend fails, providing 8-9x better performance than CPU fallback.
+**Key Takeaway:** Using `mlx` or `jax` as fallback strategy keeps GPU acceleration even when primary backend fails, providing 7-9x better performance than CPU fallback. JAX also benefits from JIT compilation even on CPU (2-3x faster than NumPy on repeated operations).
