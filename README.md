@@ -29,6 +29,9 @@ pip install embedding_tools[mlx]
 # With PyTorch
 pip install embedding_tools[torch]
 
+# With JAX (GPU/TPU support)
+pip install embedding_tools[jax]
+
 # Everything
 pip install embedding_tools[all]
 ```
@@ -51,11 +54,13 @@ pip install -e ".[dev]"
 from embedding_tools import get_backend
 
 # Auto-detect best available backend
-backend = get_backend()  # Uses MLX on M-series, else NumPy
+backend = get_backend()  # Uses MLX > JAX > PyTorch > NumPy
 
 # Or specify explicitly
 backend = get_backend('numpy')  # CPU
-backend = get_backend('mlx')    # Apple Silicon GPU
+backend = get_backend('mlx')    # Apple Silicon GPU (fastest on Mac)
+backend = get_backend('jax')    # GPU/TPU with JIT compilation
+backend = get_backend('torch')  # PyTorch (CUDA/MPS/CPU)
 
 # Create arrays
 embeddings = backend.create_array([[1, 2, 3], [4, 5, 6]])
@@ -127,27 +132,40 @@ cache_key = f"embeddings_{hash_val}.npz"
 |---------|----------|-------|--------|--------------|
 | NumPy   | CPU      | 1x    | System RAM | `pip install embedding_tools` |
 | MLX     | Apple Silicon GPU | 3-5x | Unified memory | `pip install embedding_tools[mlx]` |
+| JAX     | GPU/TPU (Metal/CUDA/ROCm) | 5-10x* | GPU VRAM | `pip install embedding_tools[jax]` |
 | PyTorch | CUDA/MPS/CPU | 2-4x | GPU VRAM | `pip install embedding_tools[torch]` |
+
+*Speed with JIT compilation on repeated operations
 
 **Device Options for PyTorch:**
 - `device='cuda'`: NVIDIA GPUs (Linux/Windows)
 - `device='mps'`: Apple Silicon GPU (macOS)
 - `device='cpu'`: CPU fallback (all platforms)
 
+**Device Options for JAX:**
+- `device='gpu'`: GPU acceleration (Metal/CUDA/ROCm)
+- `device='cpu'`: CPU fallback
+- `device=None`: Auto-detection (recommended)
+
 ```python
 # Explicit device configuration
 from embedding_tools import get_backend, EmbeddingStore
 
-# CUDA for NVIDIA GPUs (Linux production)
+# PyTorch: CUDA for NVIDIA GPUs (Linux production)
 backend = get_backend('torch', device='cuda')
 store = EmbeddingStore(backend='torch', max_memory_gb=40.0, device='cuda')
 
-# MPS for Apple Silicon
+# PyTorch: MPS for Apple Silicon
 backend = get_backend('torch', device='mps')
 store = EmbeddingStore(backend='torch', max_memory_gb=20.0, device='mps')
 
+# JAX: GPU acceleration (auto-detects Metal/CUDA/ROCm)
+backend = get_backend('jax', device='gpu')
+store = EmbeddingStore(backend='jax', max_memory_gb=20.0, device='gpu')
+
 # Auto-detection (recommended)
 backend = get_backend('torch')  # Automatically picks best device
+backend = get_backend('jax')    # Automatically picks best device
 ```
 
 ## Installation Validation
@@ -203,12 +221,13 @@ flake8 embedding_tools/
 
 ### Array Backends
 
-#### `get_backend(backend_name=None)`
+#### `get_backend(backend_name=None, device=None)`
 
 Get array backend instance.
 
 **Parameters:**
-- `backend_name` (str, optional): 'numpy', 'mlx', or 'torch'. Auto-detects if None.
+- `backend_name` (str, optional): 'numpy', 'mlx', 'jax', or 'torch'. Auto-detects if None.
+- `device` (str, optional): Device specification for JAX/PyTorch backends. Auto-detects if None.
 
 **Returns:** ArrayBackend instance
 
