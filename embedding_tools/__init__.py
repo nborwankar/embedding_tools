@@ -8,7 +8,7 @@ This library provides:
 - Device detection and auto-configuration
 """
 
-__version__ = '0.1.1'
+__version__ = "0.1.2"
 
 from .arrays import (
     ArrayBackend,
@@ -28,26 +28,22 @@ from .utils import detect_best_backend, detect_best_device, get_device_info
 
 __all__ = [
     # Version
-    '__version__',
-
+    "__version__",
     # Array backends
-    'ArrayBackend',
-    'get_backend',
-    'NumpyBackend',
-    'MLXBackend',
-    'TorchBackend',
-    'MLX_AVAILABLE',
-    'TORCH_AVAILABLE',
-
+    "ArrayBackend",
+    "get_backend",
+    "NumpyBackend",
+    "MLXBackend",
+    "TorchBackend",
+    "MLX_AVAILABLE",
+    "TORCH_AVAILABLE",
     # Memory management
-    'EmbeddingStore',
-
+    "EmbeddingStore",
     # Configuration
-    'compute_config_hash',
-    'compute_param_hash',
-
+    "compute_config_hash",
+    "compute_param_hash",
     # Device detection
-    'detect_best_backend',
-    'detect_best_device',
-    'get_device_info',
+    "detect_best_backend",
+    "detect_best_device",
+    "get_device_info",
 ]
