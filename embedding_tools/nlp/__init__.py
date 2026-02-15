@@ -2,5 +2,13 @@
 
 from .embedder import Embedder
 from .extractors import JSONLExtractor, SQLiteExtractor, PgVectorExtractor
+from .migration import MigrationComparator, MigrationReport
 
-__all__ = ["Embedder", "JSONLExtractor", "SQLiteExtractor", "PgVectorExtractor"]
+__all__ = [
+    "Embedder",
+    "JSONLExtractor",
+    "SQLiteExtractor",
+    "PgVectorExtractor",
+    "MigrationComparator",
+    "MigrationReport",
+]
