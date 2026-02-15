@@ -36,6 +36,15 @@ jax = [
     "jax>=0.4.0",
     "jax-metal>=0.1.0; sys_platform == 'darwin'",
 ]
+nlp = [
+    "sentence-transformers>=2.2.0",
+    "scipy>=1.9.0",
+]
+migration = [
+    "sentence-transformers>=2.2.0",
+    "scipy>=1.9.0",
+    "psycopg2-binary>=2.9.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -48,6 +57,8 @@ all = [
     "torch>=2.0.0",
     "jax>=0.4.0",
     "jax-metal>=0.1.0; sys_platform == 'darwin'",
+    "sentence-transformers>=2.2.0",
+    "scipy>=1.9.0",
 ]
 
 [project.urls]
