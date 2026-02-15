@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /Users/nitin/anaconda3/envs/embedding_tools/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /Users/nitin/Projects/github/etcprojects/embedding_tools
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collecting ... collected 8 items
+
+tests/test_nlp_extractors.py::TestJSONLExtractor::test_extracts_from_jsonl PASSED [ 12%]
+tests/test_nlp_extractors.py::TestJSONLExtractor::test_counts PASSED     [ 25%]
+tests/test_nlp_extractors.py::TestJSONLExtractor::test_save_jsonl PASSED [ 37%]
+tests/test_nlp_extractors.py::TestJSONLExtractor::test_skips_blank_lines PASSED [ 50%]
+tests/test_nlp_extractors.py::TestSQLiteExtractor::test_extracts_from_sqlite PASSED [ 62%]
+tests/test_nlp_extractors.py::TestSQLiteExtractor::test_counts PASSED    [ 75%]
+tests/test_nlp_extractors.py::TestSQLiteExtractor::test_where_clause PASSED [ 87%]
+tests/test_nlp_extractors.py::TestSQLiteExtractor::test_save_jsonl PASSED [100%]
+
+============================== 8 passed in 0.58s ===============================

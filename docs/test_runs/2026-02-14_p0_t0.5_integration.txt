@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /Users/nitin/anaconda3/envs/embedding_tools/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /Users/nitin/Projects/github/etcprojects/embedding_tools
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collecting ... collected 6 items
+
+tests/test_nlp_integration.py::TestEmbedderIntegration::test_nomic_loads_and_encodes PASSED [ 16%]
+tests/test_nlp_integration.py::TestEmbedderIntegration::test_nomic_matryoshka_256 PASSED [ 33%]
+tests/test_nlp_integration.py::TestEmbedderIntegration::test_jina_code_loads_and_encodes PASSED [ 50%]
+tests/test_nlp_integration.py::TestEmbedderIntegration::test_minilm_legacy_loads PASSED [ 66%]
+tests/test_nlp_integration.py::TestEmbedderIntegration::test_cosine_similarity_makes_sense PASSED [ 83%]
+tests/test_nlp_integration.py::TestMigrationComparatorIntegration::test_full_comparison_with_sqlite PASSED [100%]
+
+============================== 6 passed in 29.14s ==============================

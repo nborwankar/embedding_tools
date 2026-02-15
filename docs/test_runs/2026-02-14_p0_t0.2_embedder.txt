@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /Users/nitin/anaconda3/envs/embedding_tools/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /Users/nitin/Projects/github/etcprojects/embedding_tools
+configfile: pyproject.toml
+plugins: cov-7.0.0
+collecting ... collected 10 items
+
+tests/test_nlp_embedder.py::TestRegistry::test_registry_has_nomic PASSED [ 10%]
+tests/test_nlp_embedder.py::TestRegistry::test_registry_has_jina_code PASSED [ 20%]
+tests/test_nlp_embedder.py::TestRegistry::test_registry_has_legacy_minilm PASSED [ 30%]
+tests/test_nlp_embedder.py::TestRegistry::test_registry_has_legacy_mpnet PASSED [ 40%]
+tests/test_nlp_embedder.py::TestRegistry::test_registry_has_legacy_unixcoder PASSED [ 50%]
+tests/test_nlp_embedder.py::TestRegistry::test_all_entries_have_required_fields PASSED [ 60%]
+tests/test_nlp_embedder.py::TestRegistry::test_default_model_is_nomic PASSED [ 70%]
+tests/test_nlp_embedder.py::TestRegistry::test_matryoshka_truncation_config PASSED [ 80%]
+tests/test_nlp_embedder.py::TestRegistry::test_matryoshka_on_non_matryoshka_raises PASSED [ 90%]
+tests/test_nlp_embedder.py::TestRegistry::test_invalid_model_key_raises PASSED [100%]
+
+============================== 10 passed in 0.75s ==============================
