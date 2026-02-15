@@ -8,7 +8,7 @@ This library provides:
 - Device detection and auto-configuration
 """
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 from .arrays import (
     ArrayBackend,
@@ -25,6 +25,8 @@ from .memory import EmbeddingStore
 from .config import compute_config_hash, compute_param_hash
 
 from .utils import detect_best_backend, detect_best_device, get_device_info
+
+from .nlp import Embedder, MigrationComparator
 
 __all__ = [
     # Version
@@ -46,4 +48,7 @@ __all__ = [
     "detect_best_backend",
     "detect_best_device",
     "get_device_info",
+    # NLP embeddings
+    "Embedder",
+    "MigrationComparator",
 ]
