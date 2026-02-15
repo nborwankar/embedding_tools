@@ -236,6 +236,22 @@ To extend `ArrayBackend` with new operations:
 
 **IMPORTANT**: All backends must maintain interface parity. Adding to one requires adding to all.
 
+## Test Run Logging
+
+**MANDATORY: Every test run must be logged.**
+
+1. **Raw output** saved to `docs/test_runs/YYYY-MM-DD_p{phase}_t{task}_{description}.txt`
+2. **Summary row** appended to `docs/TEST_LOG.md` in the table format:
+   ```
+   | datetime | project | phase | task | command | passed | failed | skipped | deselected | duration_sec | context | commit | raw_output |
+   ```
+
+The table is designed for future import into SQLite/PostgreSQL for data mining (test count trends, duration regressions, failure rate by phase). Each row is one logical database record.
+
+See `docs/TEST_LOG.md` for the current log and `docs/test_runs/` for raw outputs.
+
+---
+
 ## Testing Strategy
 
 ### Test Organization
