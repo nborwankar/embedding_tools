@@ -226,6 +226,38 @@ class ArrayBackend(ABC):
         """
         pass
 
+    @abstractmethod
+    def top_k_cosine_neighbors(
+        self,
+        queries: Any,
+        corpus: Any,
+        k: int,
+        batch_size: Optional[int] = None,
+    ) -> Tuple[Any, Any]:
+        """For each row in queries, find the top-k cosine-nearest rows in corpus.
+
+        Args:
+            queries: (N, D) array of query vectors (or 1D, treated as (1, D)).
+            corpus:  (M, D) array of corpus vectors (or 1D, treated as (1, D)).
+            k:       Number of nearest neighbours per query (must be <= M).
+            batch_size: Optional query-side chunking for memory-bounded execution.
+                If None, the full (N, M) cosine matrix is materialised at once.
+                When set, queries are processed in chunks of `batch_size` rows.
+
+        Returns:
+            (indices, similarities), both of shape (N, k) and sorted descending
+            along axis=-1. `indices` are int (corpus row positions);
+            `similarities` are floating in the input queries' dtype.
+
+        Notes:
+            - Corpus and queries are L2-normalised internally; callers do not
+              need to normalise.
+            - For very large corpora, `batch_size` controls peak memory of the
+              N x M cosine matrix.
+            - This is exact KNN via brute-force matmul — no approximation.
+        """
+        pass
+
 
 def get_backend(backend_name: Optional[str] = None, device: Optional[str] = None) -> ArrayBackend:
     """Get array backend by name.
@@ -247,34 +279,40 @@ def get_backend(backend_name: Optional[str] = None, device: Optional[str] = None
     if backend_name is None:
         try:
             import mlx.core
-            backend_name = 'mlx'
+
+            backend_name = "mlx"
         except ImportError:
             try:
                 import jax
-                backend_name = 'jax'
+
+                backend_name = "jax"
             except ImportError:
                 try:
                     import torch
-                    backend_name = 'torch'
+
+                    backend_name = "torch"
                 except ImportError:
-                    backend_name = 'numpy'
+                    backend_name = "numpy"
 
     backend_name = backend_name.lower()
 
     if backend_name == "numpy":
         from .numpy_backend import NumpyBackend
+
         return NumpyBackend()
     elif backend_name == "mlx":
         from .mlx_backend import MLXBackend
+
         return MLXBackend()
     elif backend_name == "torch":
         from .torch_backend import TorchBackend
+
         return TorchBackend(device=device)
     elif backend_name == "jax":
         from .jax_backend import JAXBackend
+
         return JAXBackend(device=device)
     else:
         raise ValueError(
-            f"Unknown backend: {backend_name}. "
-            f"Supported: 'numpy', 'mlx', 'torch', 'jax'"
+            f"Unknown backend: {backend_name}. " f"Supported: 'numpy', 'mlx', 'torch', 'jax'"
         )

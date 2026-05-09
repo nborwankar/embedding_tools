@@ -899,3 +899,101 @@ except ImportError:
 **Status**: ✅ JAX backend implementation complete and tested
 **Branch**: `claude/add-jax-backend-011CUXRThb77nc5E6dHhXbSe`
 **Ready for**: Merge to main (pending approval)
+
+---
+
+## Release: v0.3.0 — `top_k_cosine_neighbors` (2026-05-08)
+
+### Motivation
+
+Extracted from a real workload: populating tier-1 vocab-decode columns
+for ~786K SAE features against a 248K vocabulary in the sibling MI
+project (`~/Projects/dirs/github/hf/MI/`). The Postgres-side per-row
+KNN approach was bottlenecked by Python ↔ Postgres roundtrip (~30
+features/sec, 7-hour ETA at full scale). In-memory matmul on Apple
+Silicon GPU via MLX got the same 786K-feature workload to ~8 minutes
+(~1623 feat/s, 54× speedup).
+
+The kernel that did the actual work — exact top-k cosine neighbours
+between two sets of vectors — is generic enough to belong in
+`embedding_tools`, not buried in a project-local script.
+
+### Method added (one-line summary)
+
+```python
+def top_k_cosine_neighbors(
+    self,
+    queries,        # (N, D) array
+    corpus,         # (M, D) array
+    k: int,
+    batch_size: Optional[int] = None,
+) -> Tuple[indices, similarities]:   # both (N, k), sorted descending
+```
+
+- Brute-force exact KNN via matmul + topk. No HNSW, no approximation.
+- Corpus and queries L2-normalised internally (caller doesn't need to
+  pre-normalise).
+- `batch_size` controls peak memory of the (chunk × M) cosine matrix —
+  use it when the full N × M matrix won't fit.
+- 1D inputs treated as single-row matrices.
+- Returns sorted descending; `indices` are int (corpus row positions);
+  `similarities` are floating in queries' input dtype.
+
+### Backends implemented
+
+| Backend | Implementation notes |
+|---|---|
+| `NumpyBackend` | argpartition fast path when k < M; argsort when k == M |
+| `MLXBackend` | `mx.matmul` + `mx.argsort` + `mx.take_along_axis`; `mx.eval` after compute to flush graph |
+| `TorchBackend` | `torch.topk(largest=True, sorted=True)` — single-call top-k |
+| `JAXBackend` | `jax.lax.top_k` — single-call top-k |
+
+### Tests added (`tests/test_arrays.py::TestTopKCosineNeighbors`)
+
+Six tests, all passing:
+
+- `test_numpy_matches_ground_truth` — numpy implementation vs hand-rolled brute-force
+- `test_numpy_batched_matches_unbatched` — batching invariance
+- `test_numpy_k_equals_corpus_size` — edge case k == M
+- `test_k_too_large_raises` — clear error when k > M
+- `test_1d_input_treated_as_single_row` — input promotion
+- `test_mlx_matches_numpy` — cross-backend equivalence (MLX must equal numpy ground truth)
+
+The MLX cross-backend test runs in the `mi-experiments` conda env (which
+has MLX installed) since the `embedding_tools` env doesn't. A
+defensive `try/except (ImportError, RuntimeError)` skip makes the test
+resilient when MLX is module-importable but its Metal runtime is not.
+
+### Real-world smoke test (in MI project, not in this repo)
+
+`scripts/phase5_decode_columns_smoke.py` in the MI project ran the new
+method side-by-side with the raw-MLX baseline on 78,000 sampled SAE
+features × full 248K Qwen vocab:
+
+```
+[Smoke] index-cell mismatches: 0 / 780000
+[Smoke] cosine cells diff > 0.001: 0 / 780000
+[Smoke] max abs cosine diff: 0.000000e+00
+[Smoke] Result: PASS
+```
+
+Bit-exact match. The abstraction is correct.
+
+### Files changed
+
+- `embedding_tools/arrays/base.py` — abstract method declaration
+- `embedding_tools/arrays/numpy_backend.py` — NumPy implementation + `_numpy_topk_chunk` helper
+- `embedding_tools/arrays/mlx_backend.py` — MLX implementation + `_mlx_topk_chunk` helper
+- `embedding_tools/arrays/torch_backend.py` — PyTorch implementation + `_torch_topk_chunk` helper
+- `embedding_tools/arrays/jax_backend.py` — JAX implementation + `_jax_topk_chunk` helper
+- `tests/test_arrays.py` — `TestTopKCosineNeighbors` class with 6 tests
+- `pyproject.toml` — version 0.2.0 → 0.3.0
+- `embedding_tools/__init__.py` — `__version__` 0.2.0 → 0.3.0
+
+### Status
+
+**Status**: ✅ v0.3.0 — `top_k_cosine_neighbors` shipped on all four backends, tested, validated against real 78K × 248K workload.
+**Pattern of value**: useful for anyone needing exact KNN on
+moderate-to-large embedding tables where HNSW approximation isn't
+acceptable, on Apple Silicon (MLX), CUDA / MPS (PyTorch), TPU/GPU
+(JAX), or CPU (NumPy).

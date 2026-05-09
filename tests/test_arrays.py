@@ -15,7 +15,7 @@ class TestNumpyBackend:
     def test_create_array(self, backend):
         arr = backend.create_array([1, 2, 3, 4, 5])
         assert backend.get_shape(arr) == (5,)
-        assert backend.get_dtype(arr) == 'float32'
+        assert backend.get_dtype(arr) == "float32"
 
     def test_zeros(self, backend):
         arr = backend.zeros((3, 4))
@@ -101,6 +101,7 @@ class TestMLXBackend:
     @pytest.fixture
     def backend(self):
         from embedding_tools import MLXBackend
+
         return MLXBackend()
 
     def test_create_array(self, backend):
@@ -128,11 +129,111 @@ class TestMLXBackend:
         np.testing.assert_array_equal(arr_np2, [1, 2, 3])
 
 
+class TestTopKCosineNeighbors:
+    """Cross-backend tests for top_k_cosine_neighbors.
+
+    Numpy is the ground truth; MLX/Torch/JAX must agree to fp tolerance.
+    """
+
+    @pytest.fixture
+    def fixture(self):
+        rng = np.random.default_rng(42)
+        # Small enough to brute-force verify by hand
+        corpus = rng.standard_normal((50, 16)).astype(np.float32)
+        queries = rng.standard_normal((7, 16)).astype(np.float32)
+        return queries, corpus
+
+    def _ground_truth(self, queries, corpus, k):
+        # Brute-force: normalise both, dot, argsort descending, take top-k
+        c = corpus / np.linalg.norm(corpus, axis=1, keepdims=True)
+        q = queries / np.linalg.norm(queries, axis=1, keepdims=True)
+        cos = q @ c.T
+        idx = np.argsort(-cos, axis=-1)[:, :k]
+        sims = np.take_along_axis(cos, idx, axis=-1)
+        return idx.astype(np.int64), sims.astype(queries.dtype)
+
+    def test_numpy_matches_ground_truth(self, fixture):
+        from embedding_tools import NumpyBackend
+
+        queries, corpus = fixture
+        backend = NumpyBackend()
+        gt_idx, gt_sim = self._ground_truth(queries, corpus, k=5)
+        idx, sim = backend.top_k_cosine_neighbors(queries, corpus, k=5)
+        np.testing.assert_array_equal(idx, gt_idx)
+        np.testing.assert_allclose(sim, gt_sim, atol=1e-6)
+
+    def test_numpy_batched_matches_unbatched(self, fixture):
+        from embedding_tools import NumpyBackend
+
+        queries, corpus = fixture
+        backend = NumpyBackend()
+        idx_unbatched, sim_unbatched = backend.top_k_cosine_neighbors(queries, corpus, k=5)
+        idx_batched, sim_batched = backend.top_k_cosine_neighbors(
+            queries, corpus, k=5, batch_size=3
+        )
+        np.testing.assert_array_equal(idx_batched, idx_unbatched)
+        np.testing.assert_allclose(sim_batched, sim_unbatched, atol=1e-6)
+
+    def test_numpy_k_equals_corpus_size(self, fixture):
+        from embedding_tools import NumpyBackend
+
+        queries, corpus = fixture
+        backend = NumpyBackend()
+        idx, sim = backend.top_k_cosine_neighbors(queries, corpus, k=corpus.shape[0])
+        assert idx.shape == (queries.shape[0], corpus.shape[0])
+        # Each row of idx must be a permutation of [0..M-1]
+        for row in idx:
+            assert sorted(row.tolist()) == list(range(corpus.shape[0]))
+        # Cosines must be sorted descending
+        for row in sim:
+            assert all(row[i] >= row[i + 1] - 1e-6 for i in range(len(row) - 1))
+
+    def test_k_too_large_raises(self, fixture):
+        from embedding_tools import NumpyBackend
+
+        queries, corpus = fixture
+        backend = NumpyBackend()
+        with pytest.raises(ValueError, match="exceeds corpus size"):
+            backend.top_k_cosine_neighbors(queries, corpus, k=corpus.shape[0] + 1)
+
+    def test_1d_input_treated_as_single_row(self):
+        from embedding_tools import NumpyBackend
+
+        backend = NumpyBackend()
+        rng = np.random.default_rng(0)
+        corpus = rng.standard_normal((10, 4)).astype(np.float32)
+        single_query = rng.standard_normal(4).astype(np.float32)
+        idx, sim = backend.top_k_cosine_neighbors(single_query, corpus, k=3)
+        assert idx.shape == (1, 3)
+        assert sim.shape == (1, 3)
+
+    @pytest.mark.skipif(not MLX_AVAILABLE, reason="MLX not installed")
+    def test_mlx_matches_numpy(self, fixture):
+        from embedding_tools import MLXBackend, NumpyBackend
+
+        queries, corpus = fixture
+        np_backend = NumpyBackend()
+        try:
+            mlx_backend = MLXBackend()
+        except (ImportError, RuntimeError) as e:
+            pytest.skip(f"MLX runtime not usable: {e}")
+        np_idx, np_sim = np_backend.top_k_cosine_neighbors(queries, corpus, k=5)
+        mx_idx, mx_sim = mlx_backend.top_k_cosine_neighbors(
+            mlx_backend.from_numpy(queries),
+            mlx_backend.from_numpy(corpus),
+            k=5,
+        )
+        mx_idx_np = mlx_backend.to_numpy(mx_idx)
+        mx_sim_np = mlx_backend.to_numpy(mx_sim)
+        np.testing.assert_array_equal(mx_idx_np, np_idx)
+        np.testing.assert_allclose(mx_sim_np, np_sim, atol=1e-3)
+
+
 class TestBackendSelection:
     """Test backend selection logic."""
 
     def test_explicit_numpy(self):
-        backend = get_backend('numpy')
+        backend = get_backend("numpy")
         assert isinstance(backend, NumpyBackend)
 
     def test_auto_detection(self):
@@ -141,9 +242,9 @@ class TestBackendSelection:
 
     def test_invalid_backend(self):
         with pytest.raises(ValueError, match="Unknown backend"):
-            get_backend('invalid')
+            get_backend("invalid")
 
     def test_mlx_when_unavailable(self):
         if not MLX_AVAILABLE:
             with pytest.raises(ImportError):
-                get_backend('mlx')
+                get_backend("mlx")

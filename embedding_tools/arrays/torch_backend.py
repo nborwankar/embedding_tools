@@ -11,6 +11,7 @@ import numpy as np
 try:
     import torch
     import torch.nn.functional as F
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -28,18 +29,16 @@ class TorchBackend(ArrayBackend):
             device: Device to use ('cuda', 'mps', 'cpu', or None for auto-detect)
         """
         if not TORCH_AVAILABLE:
-            raise ImportError(
-                "PyTorch is not installed. Install with: pip install torch"
-            )
+            raise ImportError("PyTorch is not installed. Install with: pip install torch")
 
         # Auto-detect device if not specified
         if device is None:
             if torch.backends.mps.is_available():
-                device = 'mps'
+                device = "mps"
             elif torch.cuda.is_available():
-                device = 'cuda'
+                device = "cuda"
             else:
-                device = 'cpu'
+                device = "cpu"
 
         self.device = torch.device(device)
         print(f"TorchBackend using device: {self.device}")
@@ -47,7 +46,7 @@ class TorchBackend(ArrayBackend):
     def create_array(self, data: Any, dtype: Optional[str] = None) -> torch.Tensor:
         """Create tensor from data."""
         if dtype is None:
-            dtype = 'float32'
+            dtype = "float32"
 
         torch_dtype = self._get_torch_dtype(dtype)
 
@@ -61,18 +60,20 @@ class TorchBackend(ArrayBackend):
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> torch.Tensor:
         """Create tensor of zeros."""
         if dtype is None:
-            dtype = 'float32'
+            dtype = "float32"
         torch_dtype = self._get_torch_dtype(dtype)
         return torch.zeros(shape, device=self.device, dtype=torch_dtype)
 
     def ones(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> torch.Tensor:
         """Create tensor of ones."""
         if dtype is None:
-            dtype = 'float32'
+            dtype = "float32"
         torch_dtype = self._get_torch_dtype(dtype)
         return torch.ones(shape, device=self.device, dtype=torch_dtype)
 
-    def random_normal(self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0) -> torch.Tensor:
+    def random_normal(
+        self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0
+    ) -> torch.Tensor:
         """Create tensor with random normal distribution."""
         return torch.normal(mean, std, size=shape, device=self.device)
 
@@ -133,7 +134,7 @@ class TorchBackend(ArrayBackend):
     def to_numpy(self, array: torch.Tensor) -> np.ndarray:
         """Convert tensor to NumPy array."""
         # Move to CPU first if on GPU
-        if array.device.type in ['cuda', 'mps']:
+        if array.device.type in ["cuda", "mps"]:
             array = array.cpu()
         return array.detach().numpy()
 
@@ -144,9 +145,9 @@ class TorchBackend(ArrayBackend):
     def save(self, array: torch.Tensor, filepath: str) -> None:
         """Save tensor to file (as NumPy for portability)."""
         np_array = self.to_numpy(array)
-        if filepath.endswith('.npy'):
+        if filepath.endswith(".npy"):
             np.save(filepath, np_array)
-        elif filepath.endswith('.npz'):
+        elif filepath.endswith(".npz"):
             np.savez_compressed(filepath, data=np_array)
         else:
             # Default to .npy
@@ -154,9 +155,9 @@ class TorchBackend(ArrayBackend):
 
     def load(self, filepath: str) -> torch.Tensor:
         """Load tensor from file."""
-        if filepath.endswith('.npz'):
+        if filepath.endswith(".npz"):
             data = np.load(filepath)
-            np_array = data['data']
+            np_array = data["data"]
         else:
             np_array = np.load(filepath)
 
@@ -173,25 +174,69 @@ class TorchBackend(ArrayBackend):
     def get_dtype(self, array: torch.Tensor) -> str:
         """Get tensor dtype as string."""
         dtype_map = {
-            torch.float32: 'float32',
-            torch.float64: 'float64',
-            torch.float16: 'float16',
-            torch.int32: 'int32',
-            torch.int64: 'int64',
-            torch.uint8: 'uint8',
+            torch.float32: "float32",
+            torch.float64: "float64",
+            torch.float16: "float16",
+            torch.int32: "int32",
+            torch.int64: "int64",
+            torch.uint8: "uint8",
         }
         return dtype_map.get(array.dtype, str(array.dtype))
 
     def _get_torch_dtype(self, dtype_str: str) -> torch.dtype:
         """Convert dtype string to PyTorch dtype."""
         dtype_map = {
-            'float32': torch.float32,
-            'float64': torch.float64,
-            'float16': torch.float16,
-            'int32': torch.int32,
-            'int64': torch.int64,
-            'uint8': torch.uint8,
+            "float32": torch.float32,
+            "float64": torch.float64,
+            "float16": torch.float16,
+            "int32": torch.int32,
+            "int64": torch.int64,
+            "uint8": torch.uint8,
         }
         if dtype_str not in dtype_map:
             raise ValueError(f"Unsupported dtype: {dtype_str}")
         return dtype_map[dtype_str]
+
+    def top_k_cosine_neighbors(
+        self,
+        queries: torch.Tensor,
+        corpus: torch.Tensor,
+        k: int,
+        batch_size: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Brute-force exact top-k cosine neighbours (PyTorch / MPS / CUDA)."""
+        if queries.ndim == 1:
+            queries = queries.unsqueeze(0)
+        if corpus.ndim == 1:
+            corpus = corpus.unsqueeze(0)
+        if k > corpus.shape[0]:
+            raise ValueError(f"k={k} exceeds corpus size {corpus.shape[0]}")
+
+        corpus_norm = corpus / corpus.norm(dim=1, keepdim=True)
+
+        n = queries.shape[0]
+        if batch_size is None or n <= batch_size:
+            return _torch_topk_chunk(queries, corpus_norm, k)
+
+        idx_chunks: List[torch.Tensor] = []
+        cos_chunks: List[torch.Tensor] = []
+        for start in range(0, n, batch_size):
+            end = min(start + batch_size, n)
+            sub_idx, sub_cos = _torch_topk_chunk(queries[start:end], corpus_norm, k)
+            idx_chunks.append(sub_idx)
+            cos_chunks.append(sub_cos)
+        return (
+            torch.cat(idx_chunks, dim=0),
+            torch.cat(cos_chunks, dim=0),
+        )
+
+
+def _torch_topk_chunk(
+    queries: torch.Tensor, corpus_norm: torch.Tensor, k: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Compute top-k for one chunk; assumes corpus_norm is L2-normalised."""
+    q = queries / queries.norm(dim=1, keepdim=True)
+    cos = q @ corpus_norm.T  # (n, m)
+    # torch.topk gives values + indices already sorted descending when largest=True
+    sorted_cos, sorted_idx = torch.topk(cos, k=k, dim=-1, largest=True, sorted=True)
+    return sorted_idx.to(torch.int64), sorted_cos

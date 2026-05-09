@@ -11,6 +11,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -41,13 +42,13 @@ class JAXBackend(ArrayBackend):
         if device is None:
             # Auto-detect: prefer GPU/TPU over CPU
             self.device = devices[0]  # JAX puts best device first
-        elif device == 'gpu':
-            gpu_devices = [d for d in devices if d.platform in ('gpu', 'METAL', 'cuda')]
+        elif device == "gpu":
+            gpu_devices = [d for d in devices if d.platform in ("gpu", "METAL", "cuda")]
             if not gpu_devices:
                 raise ValueError("No GPU devices available")
             self.device = gpu_devices[0]
-        elif device == 'cpu':
-            cpu_devices = [d for d in devices if d.platform == 'cpu']
+        elif device == "cpu":
+            cpu_devices = [d for d in devices if d.platform == "cpu"]
             if not cpu_devices:
                 raise ValueError("No CPU devices available")
             self.device = cpu_devices[0]
@@ -115,12 +116,7 @@ class JAXBackend(ArrayBackend):
         arr = jnp.ones(shape, dtype=dtype)
         return jax.device_put(arr, self.device)
 
-    def random_normal(
-        self,
-        shape: Tuple[int, ...],
-        mean: float = 0.0,
-        std: float = 1.0
-    ) -> Any:
+    def random_normal(self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0) -> Any:
         """Create random normal array."""
         # JAX requires explicit PRNG key
         key = jax.random.PRNGKey(0)
@@ -182,4 +178,53 @@ class JAXBackend(ArrayBackend):
         """Get array dtype as string."""
         dtype_str = str(array.dtype)
         # Clean up JAX-specific prefixes
-        return dtype_str.replace('jax.numpy.', '').replace('jnp.', '')
+        return dtype_str.replace("jax.numpy.", "").replace("jnp.", "")
+
+    def top_k_cosine_neighbors(
+        self,
+        queries: Any,
+        corpus: Any,
+        k: int,
+        batch_size: Optional[int] = None,
+    ) -> Tuple[Any, Any]:
+        """Brute-force exact top-k cosine neighbours (JAX)."""
+        import jax.numpy as jnp
+
+        queries = jnp.asarray(queries)
+        corpus = jnp.asarray(corpus)
+        if queries.ndim == 1:
+            queries = queries[None, :]
+        if corpus.ndim == 1:
+            corpus = corpus[None, :]
+        if k > corpus.shape[0]:
+            raise ValueError(f"k={k} exceeds corpus size {corpus.shape[0]}")
+
+        corpus_norm = corpus / jnp.linalg.norm(corpus, axis=1, keepdims=True)
+
+        n = queries.shape[0]
+        if batch_size is None or n <= batch_size:
+            return _jax_topk_chunk(queries, corpus_norm, k)
+
+        idx_chunks: List[Any] = []
+        cos_chunks: List[Any] = []
+        for start in range(0, n, batch_size):
+            end = min(start + batch_size, n)
+            sub_idx, sub_cos = _jax_topk_chunk(queries[start:end], corpus_norm, k)
+            idx_chunks.append(sub_idx)
+            cos_chunks.append(sub_cos)
+        return (
+            jnp.concatenate(idx_chunks, axis=0),
+            jnp.concatenate(cos_chunks, axis=0),
+        )
+
+
+def _jax_topk_chunk(queries, corpus_norm, k: int):
+    """Compute top-k for one chunk; assumes corpus_norm is L2-normalised."""
+    import jax
+    import jax.numpy as jnp
+
+    q = queries / jnp.linalg.norm(queries, axis=1, keepdims=True)
+    cos = q @ corpus_norm.T  # (n, m)
+    # jax.lax.top_k returns (values, indices) sorted descending
+    sorted_cos, sorted_idx = jax.lax.top_k(cos, k=k)
+    return sorted_idx.astype(jnp.int64), sorted_cos

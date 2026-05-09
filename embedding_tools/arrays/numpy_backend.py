@@ -29,7 +29,9 @@ class NumpyBackend(ArrayBackend):
             dtype = np.float32
         return np.ones(shape, dtype=dtype)
 
-    def random_normal(self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0) -> np.ndarray:
+    def random_normal(
+        self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0
+    ) -> np.ndarray:
         """Create array with random normal distribution."""
         return np.random.normal(mean, std, shape).astype(np.float32)
 
@@ -85,12 +87,12 @@ class NumpyBackend(ArrayBackend):
     def save(self, array: np.ndarray, filepath: str) -> None:
         """Save array to file."""
         ext = os.path.splitext(filepath)[1].lower()
-        if ext == '.npy':
+        if ext == ".npy":
             np.save(filepath, array)
-        elif ext == '.npz':
+        elif ext == ".npz":
             np.savez_compressed(filepath, data=array)
-        elif ext == '.pkl':
-            with open(filepath, 'wb') as f:
+        elif ext == ".pkl":
+            with open(filepath, "wb") as f:
                 pickle.dump(array, f)
         else:
             # Default to .npy
@@ -99,13 +101,13 @@ class NumpyBackend(ArrayBackend):
     def load(self, filepath: str) -> np.ndarray:
         """Load array from file."""
         ext = os.path.splitext(filepath)[1].lower()
-        if ext == '.npy':
+        if ext == ".npy":
             return np.load(filepath)
-        elif ext == '.npz':
+        elif ext == ".npz":
             data = np.load(filepath)
-            return data['data']
-        elif ext == '.pkl':
-            with open(filepath, 'rb') as f:
+            return data["data"]
+        elif ext == ".pkl":
+            with open(filepath, "rb") as f:
                 return pickle.load(f)
         else:
             # Try .npy first
@@ -113,7 +115,7 @@ class NumpyBackend(ArrayBackend):
                 return np.load(filepath)
             except:
                 # Fallback to pickle
-                with open(filepath, 'rb') as f:
+                with open(filepath, "rb") as f:
                     return pickle.load(f)
 
     def get_memory_usage(self, array: np.ndarray) -> int:
@@ -127,3 +129,58 @@ class NumpyBackend(ArrayBackend):
     def get_dtype(self, array: np.ndarray) -> str:
         """Get array dtype."""
         return str(array.dtype)
+
+    def top_k_cosine_neighbors(
+        self,
+        queries: np.ndarray,
+        corpus: np.ndarray,
+        k: int,
+        batch_size: Optional[int] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Brute-force exact top-k cosine neighbours (NumPy)."""
+        queries = np.asarray(queries)
+        corpus = np.asarray(corpus)
+        if queries.ndim == 1:
+            queries = queries[None, :]
+        if corpus.ndim == 1:
+            corpus = corpus[None, :]
+        if k > corpus.shape[0]:
+            raise ValueError(f"k={k} exceeds corpus size {corpus.shape[0]}")
+
+        # Normalise corpus once
+        corpus_norm = corpus / np.linalg.norm(corpus, axis=1, keepdims=True)
+
+        n = queries.shape[0]
+        if batch_size is None or n <= batch_size:
+            return _numpy_topk_chunk(queries, corpus_norm, k)
+
+        idx_chunks: List[np.ndarray] = []
+        cos_chunks: List[np.ndarray] = []
+        for start in range(0, n, batch_size):
+            end = min(start + batch_size, n)
+            sub_idx, sub_cos = _numpy_topk_chunk(queries[start:end], corpus_norm, k)
+            idx_chunks.append(sub_idx)
+            cos_chunks.append(sub_cos)
+        return (
+            np.concatenate(idx_chunks, axis=0),
+            np.concatenate(cos_chunks, axis=0),
+        )
+
+
+def _numpy_topk_chunk(
+    queries: np.ndarray, corpus_norm: np.ndarray, k: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute top-k for one chunk; assumes corpus_norm is L2-normalised."""
+    q = queries / np.linalg.norm(queries, axis=1, keepdims=True)
+    cos = q @ corpus_norm.T  # (n, m)
+
+    if k == cos.shape[1]:
+        sorted_idx = np.argsort(-cos, axis=-1)
+    else:
+        # argpartition gives unordered top-k; reorder by value
+        part = np.argpartition(-cos, kth=k - 1, axis=-1)[:, :k]
+        within = np.argsort(-np.take_along_axis(cos, part, axis=-1), axis=-1)
+        sorted_idx = np.take_along_axis(part, within, axis=-1)
+
+    sorted_cos = np.take_along_axis(cos, sorted_idx, axis=-1)
+    return sorted_idx.astype(np.int64), sorted_cos.astype(queries.dtype)

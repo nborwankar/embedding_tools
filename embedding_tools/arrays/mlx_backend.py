@@ -1,4 +1,5 @@
 """MLX array backend implementation for Apple Silicon."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -10,6 +11,7 @@ from .base import ArrayBackend
 
 try:
     import mlx.core as mx
+
     MLX_AVAILABLE = True
 except ImportError:
     MLX_AVAILABLE = False
@@ -21,9 +23,7 @@ class MLXBackend(ArrayBackend):
 
     def __init__(self):
         if not MLX_AVAILABLE:
-            raise ImportError(
-                "MLX is not available. Please install mlx with: pip install mlx"
-            )
+            raise ImportError("MLX is not available. Please install mlx with: pip install mlx")
 
     def create_array(self, data: Any, dtype: Optional[str] = None) -> mx.array:
         """Create MLX array from data."""
@@ -55,7 +55,9 @@ class MLXBackend(ArrayBackend):
             dtype = getattr(mx, dtype, mx.float32)
         return mx.ones(shape, dtype=dtype)
 
-    def random_normal(self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0) -> mx.array:
+    def random_normal(
+        self, shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0
+    ) -> mx.array:
         """Create array with random normal distribution."""
         return mx.random.normal(shape, dtype=mx.float32) * std + mean
 
@@ -115,13 +117,13 @@ class MLXBackend(ArrayBackend):
         numpy_array = self.to_numpy(array)
 
         ext = os.path.splitext(filepath)[1].lower()
-        if ext == '.npy':
+        if ext == ".npy":
             np.save(filepath, numpy_array)
-        elif ext == '.npz':
+        elif ext == ".npz":
             np.savez_compressed(filepath, data=numpy_array)
-        elif ext == '.pkl':
+        elif ext == ".pkl":
             # Save as MLX array in pickle
-            with open(filepath, 'wb') as f:
+            with open(filepath, "wb") as f:
                 pickle.dump(array, f)
         else:
             # Default to .npy
@@ -130,15 +132,15 @@ class MLXBackend(ArrayBackend):
     def load(self, filepath: str) -> mx.array:
         """Load array from file."""
         ext = os.path.splitext(filepath)[1].lower()
-        if ext == '.npy':
+        if ext == ".npy":
             numpy_array = np.load(filepath)
             return self.from_numpy(numpy_array)
-        elif ext == '.npz':
+        elif ext == ".npz":
             data = np.load(filepath)
-            numpy_array = data['data']
+            numpy_array = data["data"]
             return self.from_numpy(numpy_array)
-        elif ext == '.pkl':
-            with open(filepath, 'rb') as f:
+        elif ext == ".pkl":
+            with open(filepath, "rb") as f:
                 loaded = pickle.load(f)
                 if isinstance(loaded, mx.array):
                     return loaded
@@ -151,7 +153,7 @@ class MLXBackend(ArrayBackend):
                 return self.from_numpy(numpy_array)
             except:
                 # Fallback to pickle
-                with open(filepath, 'rb') as f:
+                with open(filepath, "rb") as f:
                     loaded = pickle.load(f)
                     if isinstance(loaded, mx.array):
                         return loaded
@@ -170,3 +172,49 @@ class MLXBackend(ArrayBackend):
     def get_dtype(self, array: mx.array) -> str:
         """Get array dtype."""
         return str(array.dtype)
+
+    def top_k_cosine_neighbors(
+        self,
+        queries: mx.array,
+        corpus: mx.array,
+        k: int,
+        batch_size: Optional[int] = None,
+    ) -> Tuple[mx.array, mx.array]:
+        """Brute-force exact top-k cosine neighbours (MLX / Apple Silicon GPU)."""
+        if queries.ndim == 1:
+            queries = mx.expand_dims(queries, 0)
+        if corpus.ndim == 1:
+            corpus = mx.expand_dims(corpus, 0)
+        if k > corpus.shape[0]:
+            raise ValueError(f"k={k} exceeds corpus size {corpus.shape[0]}")
+
+        # Normalise corpus once
+        corpus_norm = corpus / mx.linalg.norm(corpus, axis=1, keepdims=True)
+
+        n = queries.shape[0]
+        if batch_size is None or n <= batch_size:
+            return _mlx_topk_chunk(queries, corpus_norm, k)
+
+        idx_chunks: List[mx.array] = []
+        cos_chunks: List[mx.array] = []
+        for start in range(0, n, batch_size):
+            end = min(start + batch_size, n)
+            sub_idx, sub_cos = _mlx_topk_chunk(queries[start:end], corpus_norm, k)
+            idx_chunks.append(sub_idx)
+            cos_chunks.append(sub_cos)
+        return (
+            mx.concatenate(idx_chunks, axis=0),
+            mx.concatenate(cos_chunks, axis=0),
+        )
+
+
+def _mlx_topk_chunk(queries: mx.array, corpus_norm: mx.array, k: int) -> Tuple[mx.array, mx.array]:
+    """Compute top-k for one chunk; assumes corpus_norm is L2-normalised."""
+    q = queries / mx.linalg.norm(queries, axis=1, keepdims=True)
+    cos = mx.matmul(q, mx.transpose(corpus_norm))  # (n, m)
+
+    # MLX argsort is stable and fast enough at this scale; no argpartition path
+    sorted_idx = mx.argsort(-cos, axis=-1)[:, :k].astype(mx.int32)
+    sorted_cos = mx.take_along_axis(cos, sorted_idx, axis=-1)
+    mx.eval(sorted_idx, sorted_cos)
+    return sorted_idx, sorted_cos
